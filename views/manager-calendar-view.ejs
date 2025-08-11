@@ -134,7 +134,7 @@
             <i class="fas fa-chevron-down toggle-icon"></i>
           </button>
           <a href="/dashboard/manager/assigned-resources" class="btn btn-secondary">
-            <i class="fas fa-file-excel">  Excel View</i>
+            <i class="fas fa-file-excel">  Table View</i>
           </a>
           <button id="toggleDragFill" class="btn btn-success">
             <i class="fas fa-fill"></i> Enable Drag Fill
@@ -563,7 +563,7 @@
 .advanced-filters-dropdown {
   max-height: 0;
   overflow: hidden;
-  transition: max-height 0.4s ease, padding 0.4s ease;
+  transition: max-height 0ms ease-in-out, padding 0ms ease-in-out;
   padding: 0 20px;
   margin: 0 -20px;
 }
@@ -2190,13 +2190,13 @@ function startWaveProgress() {
   waveAnimationInterval = setInterval(() => {
     // Medium loading progression
     if (waveProgress < 40) {
-      waveProgress += Math.random() * 4 + 2; // Medium initial loading (2-6% per tick)
+      waveProgress += Math.random() * 8 + 6; // Medium initial loading (2-6% per tick)
     } else if (waveProgress < 80) {
-      waveProgress += Math.random() * 3 + 2; // Medium speed (2-5% per tick)
+      waveProgress += Math.random() * 6 + 4; // Medium speed (2-5% per tick)
     } else if (waveProgress < 95) {
-      waveProgress += Math.random() * 2 + 1; // Slower medium speed (1-3% per tick)
+      waveProgress += Math.random() * 4 + 2; // Slower medium speed (1-3% per tick)
     } else {
-      waveProgress += Math.random() * 1 + 0.5; // Gentle final stretch (0.5-1.5% per tick)
+      waveProgress += Math.random() * 2 + 1; // Gentle final stretch (0.5-1.5% per tick)
     }
     
     if (waveProgress >= 100) {
@@ -2211,9 +2211,9 @@ function startWaveProgress() {
     if (waveProgress >= 100) {
       setTimeout(() => {
         hideWaveLoader();
-      }, 500); // Medium delay before hiding
+      }, 200); // Medium delay before hiding
     }
-  }, 100); // Medium update interval
+  }, 25); // Medium update interval
 }
 
 function initializeWave() {

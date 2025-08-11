@@ -72,8 +72,8 @@
             <th>Name</th>
             <th>Payroll Company</th>
             <th>Division</th>
-            <th>Practice</th>
-            <th>Practice Head</th>
+            <th>Home Practice</th>
+            <th>Practice Manager</th>
             <th>Current Allocations</th>
           </tr>
         </thead>
@@ -255,6 +255,7 @@
     const section = document.getElementById('project-allocation-section');
     section.innerHTML = '';
     if (!selected.length) return;
+
     // For both single and multiple employees, allow multiple project selection and submit as arrays
     section.innerHTML = `<label class='form-label'><strong>Allocate Project(s):</strong></label>
       <div id='project-rows'></div>
@@ -279,7 +280,9 @@
         <select name='project_ids[]' class='form-select' required>
           <option value=''>-- Select Project --</option>
           <% projects.forEach(project => { %>
-            <option value='<%= project._id %>'><%= project.projectName %></option>
+            <option value='<%= project._id %>'>
+              <%= project.projectName %> (Manager: <%= project.projectManager %>, CBSL: <%= project.cbslClient %>, DIH: <%= project.dihClient %>)
+            </option>
           <% }) %>
         </select>
       </div>
@@ -288,7 +291,7 @@
         <div class='text-danger small hours-warning' style='display:none;'></div>
       </div>
       <div class='col-md-2'>
-        <button type='button' class='btn btn-outline-danger btn-sm' onclick='this.parentElement.parentElement.remove()'>🗑️</button>
+        <button type='button' class='btn btn-outline-danger btn-sm' onclick='this.parentElement.parentElement.remove()'>🗑</button>
       </div>
     `;
     container.appendChild(row);
@@ -312,9 +315,10 @@
         const v = Number(inp.value);
         if (!isNaN(v)) total += v;
       });
+      // For multiple employees, total hours per employee per day must be 1-8 (same as single)
       if (total < 1 || total > 8) {
         valid = false;
-        msg = 'Total hours for this employee must be between 1 and 8 (inclusive) per day.';
+        msg = 'Total hours per employee per day (across all projects) must be between 1 and 8.';
       }
     }
     if (!valid) {
@@ -448,41 +452,9 @@
     }
   }
 
-  // Manual conflict checking function
-  async function checkConflictsManually() {
-    const loading = document.getElementById('loading-status');
-    const checkBtn = document.querySelector('button[onclick="checkConflictsManually()"]');
-    
-    checkBtn.disabled = true;
-    checkBtn.textContent = 'Checking...';
-    loading.textContent = 'Checking for allocation conflicts...';
-    
-    try {
-      const conflictCheck = await checkAllocationConflicts();
-      
-      if (conflictCheck.hasConflicts) {
-        alert(conflictCheck.message);
-      } else {
-        const selected = Array.from(document.querySelectorAll('input[name="emp_ids"]:checked')).map(cb => cb.value);
-        if (selected.length > 0) {
-          alert('✅ No conflicts found! All selected employees are available for the specified hours and date range.');
-        } else {
-          alert('Please select employees and set dates before checking for conflicts.');
-        }
-      }
-    } catch (error) {
-      console.error('Error checking conflicts:', error);
-      alert('An error occurred while checking conflicts. Please try again.');
-    } finally {
-      loading.textContent = '';
-      checkBtn.disabled = false;
-      checkBtn.textContent = '🔍 Check Conflicts';
-    }
-  }
-
   // Form submission handler with conflict checking
   document.addEventListener('DOMContentLoaded', function() {
-    renderEmployeeCheckboxes(''); // Initialize employee list on page load
+    renderEmployeeCheckboxes('');
     
     // Add date change handlers to refresh allocation info
     const startDateInput = document.getElementById('start_date');
@@ -537,6 +509,38 @@
       }
     });
   });
+
+  // Manual conflict checking function
+  async function checkConflictsManually() {
+    const loading = document.getElementById('loading-status');
+    const checkBtn = document.querySelector('button[onclick="checkConflictsManually()"]');
+    
+    checkBtn.disabled = true;
+    checkBtn.textContent = 'Checking...';
+    loading.textContent = 'Checking for allocation conflicts...';
+    
+    try {
+      const conflictCheck = await checkAllocationConflicts();
+      
+      if (conflictCheck.hasConflicts) {
+        alert(conflictCheck.message);
+      } else {
+        const selected = Array.from(document.querySelectorAll('input[name="emp_ids"]:checked')).map(cb => cb.value);
+        if (selected.length > 0) {
+          alert('✅ No conflicts found! All selected employees are available for the specified hours and date range.');
+        } else {
+          alert('Please select employees and set dates before checking for conflicts.');
+        }
+      }
+    } catch (error) {
+      console.error('Error checking conflicts:', error);
+      alert('An error occurred while checking conflicts. Please try again.');
+    } finally {
+      loading.textContent = '';
+      checkBtn.disabled = false;
+      checkBtn.textContent = '🔍 Check Conflicts';
+    }
+  }
 </script>
 
 </body>

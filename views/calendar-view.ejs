@@ -136,7 +136,7 @@
             <i class="fas fa-chevron-down toggle-icon"></i>
           </button>
           <a href="/assigned-resources" class="btn btn-secondary">
-            <i class="fas fa-file-excel">  Excel View</i>
+            <i class="fas fa-file-excel">  Table View</i>
           </a>
           <button id="toggleDragFill" class="btn btn-success">
             <i class="fas fa-fill"></i> Enable Drag Fill
@@ -563,7 +563,7 @@
 .advanced-filters-dropdown {
   max-height: 0;
   overflow: hidden;
-  transition: max-height 0.4s ease, padding 0.4s ease;
+  transition: max-height 0ms ease-in-out, padding 0ms ease-in-out;
   padding: 0 20px;
   margin: 0 -20px;
 }
@@ -1959,9 +1959,9 @@ function startWaveProgress() {
     if (waveProgress >= 100) {
       setTimeout(() => {
         hideWaveLoader();
-      }, 300); // Reduced from 800ms to 300ms
+      }, 200); // Reduced from 800ms to 300ms
     }
-  }, 60); // Reduced from 120ms to 60ms
+  }, 25); // Reduced from 120ms to 60ms
 }
 
 // Show wave loader on page load

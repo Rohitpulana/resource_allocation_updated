@@ -20,6 +20,7 @@ const ProjectMaster = require('./models/ProjectMaster');
 const PracticeMaster = require('./models/PracticeMaster');
 const AssignedSchedule = require('./models/AssignedSchedule');
 const AuditLog = require('./models/AuditLog');
+const User = require('./models/User');
 
 // Audit logging utility functions
 async function logAuditAction(req, action, assignmentId, before, after, description, changes = {}) {
@@ -29,8 +30,30 @@ async function logAuditAction(req, action, assignmentId, before, after, descript
     console.log('🔍 After:', after);
     console.log('🔍 Changes:', changes);
     
+    // Skip audit logging for admin users
+    if (req.session.user?.role === 'admin') {
+      console.log('🔍 Skipping audit log for admin user:', req.session.user?.email);
+      return;
+    }
+    
     const manager = req.session.user?.email || 'Unknown';
-    const route = req.route?.path || req.originalUrl;
+    
+    // Better route detection - differentiate between admin and manager contexts
+    let route = req.originalUrl || req.route?.path || 'Unknown';
+    
+    // If the route is generic (like /schedule), determine context from user role and description
+    if (route === '/schedule' || route.includes('/schedule')) {
+      if (req.session.user?.role === 'manager') {
+        route = '/dashboard/manager/schedule';
+      }
+    }
+    
+    // If description contains manager-schedule, use that to determine route
+    if (description && description.includes('via manager-schedule')) {
+      route = '/dashboard/manager/schedule';
+    } else if (description && description.includes('via manager-assigned-resources')) {
+      route = '/dashboard/manager/assigned-resources';
+    }
     
     // Get employee and project names for better description
     let employeeCode = '', employeeName = '', projectName = '';
@@ -198,27 +221,27 @@ const users = [
     email: 'admin@cbsl.com',
     password: bcrypt.hashSync('admin123', 10),
     role: 'admin'
-  },
-  {
-    email: 'manager.DIH@cbsl.com',
-    password: bcrypt.hashSync('123', 10),
-    role: 'manager'
-  },
-  {
-    email: 'manager.ABC@cbsl.com',
-    password: bcrypt.hashSync('abc123', 10),
-    role: 'manager'
-  },
-  {
-    email: 'manager.XYZ@cbsl.com',
-    password: bcrypt.hashSync('xyz123', 10),
-    role: 'manager'
-  },
-  {
-    email: 'manager.PQR@cbsl.com',
-    password: bcrypt.hashSync('pqr123', 10),
-    role: 'manager'
   }
+  // {
+  //   email: 'manager.DIH@cbsl.com',
+  //   password: bcrypt.hashSync('123', 10),
+  //   role: 'manager'
+  // },
+  // {
+  //   email: 'manager.ABC@cbsl.com',
+  //   password: bcrypt.hashSync('abc123', 10),
+  //   role: 'manager'
+  // },
+  // {
+  //   email: 'manager.XYZ@cbsl.com',
+  //   password: bcrypt.hashSync('xyz123', 10),
+  //   role: 'manager'
+  // },
+  // {
+  //   email: 'manager.PQR@cbsl.com',
+  //   password: bcrypt.hashSync('pqr123', 10),
+  //   role: 'manager'
+  // }
 ];
 
 // Multer for uploads
@@ -278,6 +301,16 @@ function isAdmin(req, res, next) {
   });
 }
 
+function isManager(req, res, next) {
+  if (req.session.user?.role === 'manager') return next();
+  res.status(403).render('error', { 
+    message: 'Access denied: Only managers can access this page.',
+    layout: false,
+    title: 'Access Denied',
+    user: req.session.user
+  });
+}
+
 // Login Routes
 
 app.get('/', (req, res) => {
@@ -296,9 +329,34 @@ app.get('/login', csrfProtection, (req, res) => {
 
 app.post('/login', csrfProtection, async (req, res) => {
   const { email, password } = req.body;
-  const user = users.find(u => u.email === email);
+  
+  try {
+    // Try MongoDB first
+    let user = await User.findOne({ email });
+    if (user && await bcrypt.compare(password, user.password)) {
+      req.session.user = {
+        id: user._id,
+        email: user.email,
+        role: user.role
+      };
+      if (user.role === 'manager') return res.redirect('/dashboard/manager');
+      if (user.role === 'admin') return res.redirect('/dashboard/admin');
+      return res.status(403).send('Unauthorized role');
+    }
 
-  if (!user || !(await bcrypt.compare(password, user.password))) {
+    // If not found in DB, check dummy array
+    const dummyUser = users.find(u => u.email === email && bcrypt.compareSync(password, u.password));
+    if (dummyUser) {
+      req.session.user = {
+        email: dummyUser.email,
+        role: dummyUser.role
+      };
+      if (dummyUser.role === 'manager') return res.redirect('/dashboard/manager');
+      if (dummyUser.role === 'admin') return res.redirect('/dashboard/admin');
+      return res.status(403).send('Unauthorized role');
+    }
+
+    // If neither found
     return res.render('login', {
       title: 'Login',
       messages: ['Invalid credentials'],
@@ -306,19 +364,22 @@ app.post('/login', csrfProtection, async (req, res) => {
       layout: false,
       csrfToken: req.csrfToken()
     });
+  } catch (error) {
+    console.error('Login error:', error);
+    return res.render('login', {
+      title: 'Login',
+      messages: ['An error occurred during login'],
+      hasErrors: true,
+      layout: false,
+      csrfToken: req.csrfToken()
+    });
   }
-
-  req.session.user = user;
-
-  if (user.role === 'manager') return res.redirect('/dashboard/manager');
-  if (user.role === 'admin') return res.redirect('/dashboard/admin');
-  res.status(403).send('Unauthorized role');
 });
 
 // Dashboards
 
 // Manager Dashboard with sidebar (only Schedule & Assigned Resources)
-app.get('/dashboard/manager', isAuth, (req, res) => {
+app.get('/dashboard/manager', isAuth, isManager, (req, res) => {
   res.render('manager-welcome', {
     title: 'Manager Dashboard',
     layout: 'sidebar-layout',
@@ -328,7 +389,7 @@ app.get('/dashboard/manager', isAuth, (req, res) => {
 
 
 // Manager Calendar Route
-app.get('/dashboard/manager/calendar-view', (req, res) => {
+app.get('/dashboard/manager/calendar-view', isAuth, isManager, (req, res) => {
     // Manager Calendar View: fetch and pass all required data
   (async () => {
     try {
@@ -419,7 +480,7 @@ const allEmployees = await Employee.find({}, 'empCode name division designation 
 
 // Manager: Schedule page
 
-app.get('/dashboard/manager/schedule', isAuth, async (req, res) => {
+app.get('/dashboard/manager/schedule', isAuth, isManager, async (req, res) => {
   try {
     const employees = await Employee.find();
     const projects = await ProjectMaster.find({}, 'projectName projectManager cbslClient dihClient');
@@ -486,7 +547,7 @@ app.post('/assigned-resources/add', isAuth, isAdmin, async (req, res) => {
 
 // Manager: Assigned Resources page
 // Manager: Update assigned schedule (PUT)
-app.put('/dashboard/manager/assigned-resources/:id', isAuth, async (req, res) => {
+app.put('/dashboard/manager/assigned-resources/:id', isAuth, isManager, async (req, res) => {
   try {
     const scheduleId = req.params.id;
     const updateFields = {};
@@ -539,7 +600,7 @@ app.put('/dashboard/manager/assigned-resources/:id', isAuth, async (req, res) =>
 });
 
 // Manager: Delete assigned schedule (DELETE)
-app.delete('/dashboard/manager/assigned-resources/:id', isAuth, async (req, res) => {
+app.delete('/dashboard/manager/assigned-resources/:id', isAuth, isManager, async (req, res) => {
   try {
     const scheduleId = req.params.id;
     
@@ -562,7 +623,7 @@ app.delete('/dashboard/manager/assigned-resources/:id', isAuth, async (req, res)
   }
 });
 
-app.get('/dashboard/manager/assigned-resources', isAuth, async (req, res) => {
+app.get('/dashboard/manager/assigned-resources', isAuth, isManager, async (req, res) => {
   try {
     // Get filter params
     const employeeFilter = req.query.employee || '';
@@ -680,7 +741,7 @@ app.get('/dashboard/manager/assigned-resources', isAuth, async (req, res) => {
 });
 
 
-app.post('/dashboard/manager/schedule', isAuth, async (req, res) => {
+app.post('/dashboard/manager/schedule', isAuth, isManager, async (req, res) => {
   try {
     const empCodes = Array.isArray(req.body.emp_ids) ? req.body.emp_ids : [req.body.emp_ids];
     const filteredEmpCodes = empCodes.filter(code => code?.trim());
@@ -721,18 +782,25 @@ app.post('/dashboard/manager/schedule', isAuth, async (req, res) => {
       return dateStr;
     }
 
-    const hasMultipleProjects = Array.isArray(req.body['project_ids[]']) && req.body['project_ids[]'].length > 0;
-    const hasMultipleEmployees = filteredEmpCodes.length > 1;
-    if (hasMultipleEmployees && hasMultipleProjects) {
-      // Multiple employees, multiple projects
-      const projectIds = Array.isArray(req.body['project_ids[]']) ? req.body['project_ids[]'] : [req.body['project_ids[]']];
-      const hoursList = Array.isArray(req.body['hours_list[]']) ? req.body['hours_list[]'] : [req.body['hours_list[]']];
+    // Check if we have project arrays (multiple projects)
+    const projectIds = req.body['project_ids[]'] ? (Array.isArray(req.body['project_ids[]']) ? req.body['project_ids[]'] : [req.body['project_ids[]']]) : [];
+    const hoursList = req.body['hours_list[]'] ? (Array.isArray(req.body['hours_list[]']) ? req.body['hours_list[]'] : [req.body['hours_list[]']]) : [];
+    
+    // Check if we have single project fields
+    const singleProjectId = req.body.project_id;
+    const singleHours = req.body.hours;
+
+    // Determine which path to take
+    if (projectIds.length > 0 && hoursList.length > 0 && projectIds.length === hoursList.length) {
+      // Path 1: Multiple projects assignment (works for both single and multiple employees)
       for (const empCode of filteredEmpCodes) {
         const employee = await Employee.findOne({ empCode });
         if (!employee) {
           console.warn('Employee not found:', empCode);
           continue;
         }
+        
+        // Over-allocation check
         let overAllocated = false;
         let overAllocDetails = [];
         for (const { key: dateKey, dateObj } of dateKeys) {
@@ -761,6 +829,8 @@ app.post('/dashboard/manager/schedule', isAuth, async (req, res) => {
         if (overAllocated) {
           return res.redirect(`/dashboard/manager/assigned-resources?error=${encodeURIComponent('Over allocation: Total hours for ' + empCode + ' exceed 8 on ' + overAllocDetails.join(', '))}`);
         }
+        
+        // Save assignments for each project
         for (let i = 0; i < projectIds.length; i++) {
           const projectId = projectIds[i];
           const hours = Number(hoursList[i]) || 0;
@@ -778,7 +848,8 @@ app.post('/dashboard/manager/schedule', isAuth, async (req, res) => {
             $setOnInsert: { employee: employee._id, project: projectId },
             $set: { dailyHours: dailyHoursObj, startDate, endDate },
           }, { upsert: true, new: true });
-          // Audit logging for multiple employees multiple projects
+          
+          // Audit logging
           const projectDoc = await ProjectMaster.findById(projectId);
           const description = `Manager ${req.session.user?.email} assigned ${hours} hours to ${empCode} for project ${projectDoc?.projectName || 'Unknown'} from ${startDate.toDateString()} to ${endDate.toDateString()} via manager-schedule`;
           const changes = {
@@ -789,7 +860,72 @@ app.post('/dashboard/manager/schedule', isAuth, async (req, res) => {
           await logAuditAction(req, existingSchedule ? 'update' : 'create', updatedSchedule._id, previousSchedule, updatedSchedule.toObject(), description, changes);
         }
       }
-    } else if (filteredEmpCodes.length === 1 && req.body['project_ids[]']) {
+    } else if (singleProjectId && singleHours) {
+      // Path 2: Single project assignment to multiple employees
+      const projectDoc = await ProjectMaster.findById(singleProjectId);
+      if (!projectDoc) {
+        return res.redirect(`/dashboard/manager/assigned-resources?error=${encodeURIComponent('Project not found: ' + singleProjectId)}`);
+      }
+      const hours = Number(singleHours) || 0;
+      
+      for (const empCode of filteredEmpCodes) {
+        const employee = await Employee.findOne({ empCode });
+        if (!employee) {
+          console.warn('Employee not found:', empCode);
+          continue;
+        }
+        
+        // Over-allocation check
+        let overAllocated = false;
+        let overAllocDetails = [];
+        for (const { key: dateKey, dateObj } of dateKeys) {
+          let existingSchedules = await AssignedSchedule.find({ employee: employee._id });
+          let existingTotal = 0;
+          for (const sched of existingSchedules) {
+            let dh = sched.dailyHours && sched.dailyHours[formatDateKey(dateKey)];
+            existingTotal += Number(dh) || 0;
+          }
+          let sched = await AssignedSchedule.findOne({ employee: employee._id, project: projectDoc._id });
+          if (sched && sched.dailyHours && sched.dailyHours[formatDateKey(dateKey)]) {
+            existingTotal -= Number(sched.dailyHours[formatDateKey(dateKey)]) || 0;
+          }
+          let totalHours = existingTotal + hours;
+          if (totalHours > 8) {
+            overAllocated = true;
+            overAllocDetails.push(`${formatDateKey(dateKey)}: ${totalHours} hours`);
+          }
+        }
+        if (overAllocated) {
+          return res.redirect(`/dashboard/manager/assigned-resources?error=${encodeURIComponent('Over allocation: Total hours for ' + empCode + ' exceed 8 on ' + overAllocDetails.join(', '))}`);
+        }
+        
+        // Save assignment
+        const query = { employee: employee._id, project: projectDoc._id };
+        let existingSchedule = await AssignedSchedule.findOne(query);
+        let dailyHoursObj = {};
+        if (existingSchedule && existingSchedule.dailyHours) {
+          dailyHoursObj = { ...existingSchedule.dailyHours };
+        }
+        for (const { key: dateKey, dateObj } of dateKeys) {
+          dailyHoursObj[formatDateKey(dateKey)] = hours;
+        }
+        
+        const previousSchedule = existingSchedule ? existingSchedule.toObject() : null;
+        const updatedSchedule = await AssignedSchedule.findOneAndUpdate(query, {
+          $setOnInsert: { employee: employee._id, project: projectDoc._id },
+          $set: { dailyHours: dailyHoursObj, startDate, endDate },
+        }, { upsert: true, new: true });
+        
+        // Audit logging
+        const description = `Manager ${req.session.user?.email} assigned ${hours} hours to ${empCode} for project ${projectDoc.projectName} from ${startDate.toDateString()} to ${endDate.toDateString()} via manager-schedule`;
+        const changes = {
+          hours: hours,
+          dateRange: `${startDate.toDateString()} to ${endDate.toDateString()}`,
+          dailyHours: dailyHoursObj
+        };
+        await logAuditAction(req, existingSchedule ? 'update' : 'create', updatedSchedule._id, previousSchedule, updatedSchedule.toObject(), description, changes);
+      }
+    } else if (filteredEmpCodes.length === 1 && projectIds.length > 0) {
       // ...existing code for single employee, multiple projects...
       const empCode = filteredEmpCodes[0];
       const employee = await Employee.findOne({ empCode });
@@ -859,63 +995,8 @@ app.post('/dashboard/manager/schedule', isAuth, async (req, res) => {
         await logAuditAction(req, existingSchedule ? 'update' : 'create', updatedSchedule._id, previousSchedule, updatedSchedule.toObject(), description, changes);
       }
     } else {
-      // ...existing code for multiple employees, single project...
-      const projectId = req.body.project_id;
-      const hours = Number(req.body.hours) || 0;
-      for (const empCode of filteredEmpCodes) {
-        const employee = await Employee.findOne({ empCode });
-        if (!employee) {
-          console.warn('Employee not found:', empCode);
-          continue;
-        }
-        let overAllocated = false;
-        let overAllocDetails = [];
-        for (const { key: dateKey, dateObj } of dateKeys) {
-          let existingSchedules = await AssignedSchedule.find({ employee: employee._id });
-          let existingTotal = 0;
-          for (const sched of existingSchedules) {
-            let dh = sched.dailyHours && sched.dailyHours[formatDateKey(dateKey)];
-            existingTotal += Number(dh) || 0;
-          }
-          let sched = await AssignedSchedule.findOne({ employee: employee._id, project: projectId });
-          if (sched && sched.dailyHours && sched.dailyHours[formatDateKey(dateKey)]) {
-            existingTotal -= Number(sched.dailyHours[formatDateKey(dateKey)]) || 0;
-          }
-          let totalHours = existingTotal + hours;
-          if (totalHours > 8) {
-            overAllocated = true;
-            overAllocDetails.push(`${formatDateKey(dateKey)}: ${totalHours} hours`);
-          }
-        }
-        if (overAllocated) {
-          return res.redirect(`/dashboard/manager/assigned-resources?error=${encodeURIComponent('Over allocation: Total hours for ' + empCode + ' exceed 8 on ' + overAllocDetails.join(', '))}`);
-        }
-        const query = { employee: employee._id, project: projectId };
-        let existingSchedule = await AssignedSchedule.findOne(query);
-        let dailyHoursObj = {};
-        if (existingSchedule && existingSchedule.dailyHours) {
-          dailyHoursObj = { ...existingSchedule.dailyHours };
-        }
-        for (const { key: dateKey, dateObj } of dateKeys) {
-          dailyHoursObj[formatDateKey(dateKey)] = hours;
-        }
-        
-        const previousSchedule = existingSchedule ? existingSchedule.toObject() : null;
-        const updatedSchedule = await AssignedSchedule.findOneAndUpdate(query, {
-          $setOnInsert: { employee: employee._id, project: projectId },
-          $set: { dailyHours: dailyHoursObj, startDate, endDate },
-        }, { upsert: true, new: true });
-
-        // Audit logging for multiple employees single project
-        const projectDoc = await ProjectMaster.findById(projectId);
-        const description = `Manager ${req.session.user?.email} assigned ${hours} hours to ${empCode} for project ${projectDoc?.projectName || 'Unknown'} from ${startDate.toDateString()} to ${endDate.toDateString()} via manager-schedule`;
-        const changes = {
-          hours: hours,
-          dateRange: `${startDate.toDateString()} to ${endDate.toDateString()}`,
-          dailyHours: dailyHoursObj
-        };
-        await logAuditAction(req, existingSchedule ? 'update' : 'create', updatedSchedule._id, previousSchedule, updatedSchedule.toObject(), description, changes);
-      }
+      // Fallback case - redirect with error message
+      return res.redirect(`/dashboard/manager/assigned-resources?error=${encodeURIComponent('Invalid assignment parameters. Please ensure you have selected employees and projects correctly.')}`);
     }
     res.redirect('/dashboard/manager/assigned-resources');
   } catch (error) {
@@ -924,12 +1005,153 @@ app.post('/dashboard/manager/schedule', isAuth, async (req, res) => {
   }
 });
 
-app.get('/dashboard/admin', isAuth, isAdmin, csrfProtection, (req, res) => {
-  res.render('admin-welcome', {
-    csrfToken: req.csrfToken(),
-    title: 'Welcome Admin',
-    layout: 'sidebar-layout'
-  });
+app.get('/dashboard/admin', isAuth, isAdmin, csrfProtection, async (req, res) => {
+  try {
+    // Fetch all users from database
+    const allUsers = await User.find({}, 'email role createdAt').sort({ createdAt: -1 });
+    
+    res.render('admin-welcome', {
+      csrfToken: req.csrfToken(),
+      title: 'Welcome Admin',
+      layout: 'sidebar-layout',
+      users: allUsers
+    });
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    res.render('admin-welcome', {
+      csrfToken: req.csrfToken(),
+      title: 'Welcome Admin',
+      layout: 'sidebar-layout',
+      users: []
+    });
+  }
+});
+
+// ✅ Create User Route
+app.post('/admin/create-user', isAuth, isAdmin, csrfProtection, async (req, res) => {
+  try {
+    const { email, password, role } = req.body;
+
+    // Validation
+    if (!email || !password || !role) {
+      return res.status(400).json({ error: 'All fields are required' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+    }
+
+    if (!['manager', 'admin'].includes(role)) {
+      return res.status(400).json({ error: 'Invalid role specified' });
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ error: 'User with this email already exists' });
+    }
+
+    // Hash password
+    const hashedPassword = bcrypt.hashSync(password, 10);
+
+    // Create new user
+    const newUser = new User({
+      email,
+      password: hashedPassword,
+      role
+    });
+
+    await newUser.save();
+
+    res.status(201).json({ 
+      success: true, 
+      message: 'User created successfully',
+      user: {
+        id: newUser._id,
+        email: newUser.email,
+        role: newUser.role
+      }
+    });
+
+  } catch (error) {
+    console.error('Error creating user:', error);
+    
+    // Handle duplicate key error
+    if (error.code === 11000) {
+      return res.status(400).json({ error: 'User with this email already exists' });
+    }
+    
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ✅ Reset User Password Route
+app.post('/admin/reset-password', isAuth, isAdmin, csrfProtection, async (req, res) => {
+  try {
+    const { userId, newPassword } = req.body;
+
+    // Validation
+    if (!userId || !newPassword) {
+      return res.status(400).json({ error: 'User ID and new password are required' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+    }
+
+    // Find user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Hash new password
+    const hashedPassword = bcrypt.hashSync(newPassword, 10);
+
+    // Update password
+    await User.findByIdAndUpdate(userId, { password: hashedPassword });
+
+    res.status(200).json({ 
+      success: true, 
+      message: 'Password reset successfully'
+    });
+
+  } catch (error) {
+    console.error('Error resetting password:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ✅ Delete User Route
+app.post('/admin/delete-user', isAuth, isAdmin, csrfProtection, async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    // Validation
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
+
+    // Don't allow deleting yourself
+    if (userId === req.session.user?.id) {
+      return res.status(400).json({ error: 'You cannot delete your own account' });
+    }
+
+    // Find and delete user
+    const deletedUser = await User.findByIdAndDelete(userId);
+    if (!deletedUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.status(200).json({ 
+      success: true, 
+      message: 'User deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('Error deleting user:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // ✅ Updated View Employees Route
@@ -1891,7 +2113,7 @@ app.get('/api/project-by-id/:id', async (req, res) => {
 
 // Save assigned schedule
 
-app.post('/schedule', async (req, res) => {
+app.post('/schedule', isAuth, isAdmin, csrfProtection, async (req, res) => {
   
   try {
     const empCodes = Array.isArray(req.body.emp_ids) ? req.body.emp_ids : [req.body.emp_ids];
@@ -1989,7 +2211,9 @@ app.post('/schedule', async (req, res) => {
           for (const { key: dateKey, dateObj } of dateKeys) {
             dailyHoursObj[formatDateKey(dateKey)] = hours;
           }
-          await AssignedSchedule.findOneAndUpdate(query, {
+          
+          const previousSchedule = existingSchedule ? existingSchedule.toObject() : null;
+          const updatedSchedule = await AssignedSchedule.findOneAndUpdate(query, {
             $setOnInsert: { employee: employee._id, project: projectId },
             $set: { dailyHours: dailyHoursObj, startDate, endDate },
           }, { upsert: true, new: true });
@@ -2036,7 +2260,9 @@ app.post('/schedule', async (req, res) => {
         for (const { key: dateKey, dateObj } of dateKeys) {
           dailyHoursObj[formatDateKey(dateKey)] = hours;
         }
-        await AssignedSchedule.findOneAndUpdate(query, {
+        
+        const previousSchedule = existingSchedule ? existingSchedule.toObject() : null;
+        const updatedSchedule = await AssignedSchedule.findOneAndUpdate(query, {
           $setOnInsert: { employee: employee._id, project: projectId },
           $set: { dailyHours: dailyHoursObj, startDate, endDate },
         }, { upsert: true, new: true });
