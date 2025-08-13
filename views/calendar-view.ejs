@@ -133,11 +133,16 @@
         <div class="filter-actions d-flex align-items-center gap-2">
           <button id="advancedFilterToggle" class="btn btn-primary">
             <i class="fas fa-filter"></i>Filtering & Searching
+          <button id="advancedFilterToggle" class="btn btn-primary">
+            <i class="fas fa-filter"></i>Filtering & Searching
             <i class="fas fa-chevron-down toggle-icon"></i>
           </button>
           <a href="/assigned-resources" class="btn btn-primary">
             <i class="fas fa-file-excel">  Table View</i>
+          <a href="/assigned-resources" class="btn btn-primary">
+            <i class="fas fa-file-excel">  Table View</i>
           </a>
+          <button id="toggleDragFill" class="btn btn-primary">
           <button id="toggleDragFill" class="btn btn-primary">
             <i class="fas fa-fill"></i> Enable Drag Fill
           </button>
@@ -209,6 +214,7 @@
                 <i class="fas fa-filter"></i> Apply Filters
               </button>
               <button id="clearAllFilters" class="btn btn-primary">
+              <button id="clearAllFilters" class="btn btn-primary">
                 <i class="fas fa-times"></i> Clear All
               </button>
             </div>
@@ -220,6 +226,7 @@
       <div id="appliedFiltersSection" class="applied-filters-section">
         <div class="applied-filters-header">
           <span class="filters-label">Applied Filters:</span>
+          <button id="clearAllTags" class="btn btn-sm btn-primary">
           <button id="clearAllTags" class="btn btn-sm btn-primary">
             <i class="fas fa-times"></i> Clear All
           </button>
@@ -286,6 +293,7 @@
             </div>
           <class="modal-footer">
           <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Cancel</button>
           <button type="button" id="saveAssignment" class="btn btn-primary">Save Assignment</button>
         </div>
       </div>
@@ -333,13 +341,43 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-primary" id="deleteAssignment">Delete</button>
           <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="deleteAssignment">Delete</button>
+          <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Cancel</button>
           <button type="button" id="updateAssignment" class="btn btn-primary">Update</button>
         </div>
       </div>
     </div>
   </div>
   <!-- Calendar Container with Sticky Header and Sticky First Column -->
+  <!-- Calendar Container with Sticky Header and Sticky First Column -->
   <div class="calendar-container board-style-calendar">
+    <!-- Calendar Wrapper with proper sticky positioning -->
+    <div class="calendar-wrapper">
+      <!-- Top-left corner cell (sticky in both directions) -->
+      <div class="corner-header">
+        <span>Employee</span>
+      </div>
+      
+      <!-- Sticky header row (scrolls horizontally) -->
+      <div class="sticky-header-row">
+        <% dateRange.forEach(function(date) { 
+             var d = new Date(date);
+             var isWeekend = (d.getDay() === 0 || d.getDay() === 6); // Sunday=0, Saturday=6
+          %>
+          <div class="date-column<%= isWeekend ? ' weekend' : '' %>"><%= date %></div>
+        <% }); %>
+      </div>
+      
+      <!-- Sticky first column (scrolls vertically) -->
+      <div class="sticky-first-column">
+        <% allEmployees.forEach(function(emp, empIndex) { %>
+          <div class="employee-row" data-emp-index="<%= empIndex %>">
+            <div class="emp-cell">
+              <div class="emp-name"><%= emp.name %></div>
+              <div class="emp-meta text-muted small"><%= emp.empCode %> | <%= emp.designation %></div>
+            </div>
+          </div>
+        <% }); %>
     <!-- Calendar Wrapper with proper sticky positioning -->
     <div class="calendar-wrapper">
       <!-- Top-left corner cell (sticky in both directions) -->
@@ -371,6 +409,9 @@
       
       <!-- Scrollable calendar content -->
       <div class="calendar-content">
+      
+      <!-- Scrollable calendar content -->
+      <div class="calendar-content">
         <% function getBlockColor(percent) {
              if (percent >= 100) return '#17befc'; // fully allocated
              if (percent >= 75) return '#fa686d'; // mostly allocated  
@@ -396,6 +437,7 @@
                 data-total-hours="<%= totalHours %>">
               <div class="fixed-block sortable-container">
                 <% if (blocks.length > 0 && totalHours > 0) { %>
+                 <% blocks.filter(function(block) { return block.hours > 0; }).forEach(function(block, index) { 
                  <% blocks.filter(function(block) { return block.hours > 0; }).forEach(function(block, index) { 
                     // Calculate proportional height based on hours (out of 8 total, with available space of ~54px)
                     var blockHeightPercent = (block.hours / 8) * 100;
@@ -925,12 +967,14 @@
 }
 
 /* Calendar Container Layout with Sticky Header and Column */
+/* Calendar Container Layout with Sticky Header and Column */
 .calendar-container {
   background: #f8f9fa;
   border-radius: 8px;
   padding: 16px;
   position: relative;
   border: 1px solid #dee2e6;
+  overflow: hidden;
   overflow: hidden;
 }
 
@@ -945,8 +989,20 @@
   height: calc(100vh - 300px); /* Adjust based on your header height */
   min-height: 600px;
   background: #fff;
+/* Calendar Wrapper - Grid Layout for Sticky Positioning */
+.calendar-wrapper {
+  display: grid;
+  grid-template-areas: 
+    "corner header"
+    "sidebar content";
+  grid-template-columns: 200px 1fr;
+  grid-template-rows: 60px 1fr;
+  height: calc(100vh - 300px); /* Adjust based on your header height */
+  min-height: 600px;
+  background: #fff;
   border-radius: 8px;
   overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
   box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 
@@ -962,9 +1018,29 @@
   font-weight: 600;
   font-size: 1rem;
   color: #495057;
+/* Top-left corner cell (sticky in both directions) */
+.corner-header {
+  grid-area: corner;
+  background: #e9ecef;
+  border-bottom: 2px solid #dee2e6;
+  border-right: 2px solid #dee2e6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 1rem;
+  color: #495057;
   position: sticky;
   top: 0;
+  top: 0;
   left: 0;
+  z-index: 20;
+  box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+}
+
+/* Sticky header row (scrolls horizontally) */
+.sticky-header-row {
+  grid-area: header;
   z-index: 20;
   box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
 }
@@ -981,8 +1057,38 @@
   overflow-x: auto;
   overflow-y: hidden;
   box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  overflow-x: auto;
+  overflow-y: hidden;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
 }
 
+.sticky-header-row .date-column {
+  min-width: 120px;
+  max-width: 120px;
+  width: 120px;
+  flex-shrink: 0;
+  text-align: center;
+  font-weight: 500;
+  font-size: 0.9rem;
+  color: #495057;
+  padding: 12px 8px;
+  border-right: 1px solid #dee2e6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 60px;
+}
+
+.sticky-header-row .date-column:last-child {
+  border-right: none;
+}
+
+/* Sticky first column (scrolls vertically) */
+.sticky-first-column {
+  grid-area: sidebar;
 .sticky-header-row .date-column {
   min-width: 120px;
   max-width: 120px;
@@ -1023,26 +1129,46 @@
 }
 .sticky-first-column::-webkit-scrollbar {
   display: none; /* Chrome, Safari, Opera */
+  border-right: 2px solid #dee2e6;
+  position: sticky;
+  left: 0;
+  z-index: 10;
+  overflow-x: hidden;
+  overflow-y: auto;
+  box-shadow: 2px 0 5px rgba(0,0,0,0.1);
 }
 
+/* Hide vertical scrollbar for sticky-first-column but keep scroll functionality */
+.sticky-first-column {
+  scrollbar-width: none; /* Firefox */
+}
+.sticky-first-column::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
+.sticky-first-column .employee-row {
 .sticky-first-column .employee-row {
   height: 80px;
   border-bottom: 1px solid #dee2e6;
   display: flex;
   align-items: center;
   background: #f1f3f6;
+  background: #f1f3f6;
 }
 
+.sticky-first-column .employee-row:last-child {
 .sticky-first-column .employee-row:last-child {
   border-bottom: none;
 }
 
+.sticky-first-column .emp-cell {
 .sticky-first-column .emp-cell {
   padding: 12px 16px;
   width: 100%;
   text-align: left;
 }
 
+.sticky-first-column .emp-name {
 .sticky-first-column .emp-name {
   font-weight: 600;
   color: #212529;
@@ -1051,6 +1177,7 @@
   margin-bottom: 4px;
 }
 
+.sticky-first-column .emp-meta {
 .sticky-first-column .emp-meta {
   font-size: 0.8rem;
   color: #6c757d;
@@ -1061,15 +1188,21 @@
 .calendar-content {
   grid-area: content;
   overflow: auto;
+/* Scrollable calendar content */
+.calendar-content {
+  grid-area: content;
+  overflow: auto;
   background: #fff;
 }
 
+.calendar-content .employee-calendar-row {
 .calendar-content .employee-calendar-row {
   display: flex;
   height: 80px;
   border-bottom: 1px solid #dee2e6;
 }
 
+.calendar-content .employee-calendar-row:last-child {
 .calendar-content .employee-calendar-row:last-child {
   border-bottom: none;
 }
@@ -1086,6 +1219,7 @@
   transition: box-shadow 0.15s;
   background: #fff;
   position: relative;
+  flex-shrink: 0;
   flex-shrink: 0;
 }
 
@@ -1111,6 +1245,98 @@
   flex-direction: column;
   padding: 2px;
   box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+}
+
+/* Synchronize scrolling between header and content */
+.calendar-wrapper .sticky-header-row::-webkit-scrollbar {
+  height: 0;
+  width: 0;
+}
+
+.calendar-wrapper .calendar-content::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.calendar-wrapper .calendar-content::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.calendar-wrapper .calendar-content::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+.calendar-wrapper .calendar-content::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Responsive adjustments for sticky calendar */
+@media (max-width: 768px) {
+  .calendar-wrapper {
+    grid-template-columns: 160px 1fr;
+    height: calc(100vh - 250px);
+  }
+  
+  .sticky-header-row .date-column,
+  .calendar-cell {
+    min-width: 100px !important;
+    max-width: 100px !important;
+    width: 100px !important;
+  }
+  
+  .sticky-header-row .date-column {
+    font-size: 0.8rem;
+    padding: 8px 4px;
+  }
+  
+  .corner-header {
+    font-size: 0.9rem;
+  }
+  
+  .sticky-first-column .emp-name {
+    font-size: 0.85rem;
+  }
+  
+  .sticky-first-column .emp-meta {
+    font-size: 0.7rem !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .calendar-wrapper {
+    grid-template-columns: 140px 1fr;
+    height: calc(100vh - 200px);
+  }
+  
+  .sticky-header-row .date-column,
+  .calendar-cell {
+    min-width: 80px !important;
+    max-width: 80px !important;
+    width: 80px !important;
+  }
+  
+  .sticky-header-row .date-column {
+    font-size: 0.75rem;
+    padding: 6px 2px;
+  }
+  
+  .corner-header {
+    font-size: 0.8rem;
+    padding: 8px;
+  }
+  
+  .sticky-first-column .emp-name {
+    font-size: 0.8rem;
+  }
+  
+  .sticky-first-column .emp-meta {
+    font-size: 0.65rem !important;
+  }
+  
+  .sticky-first-column .emp-cell {
+    padding: 8px 12px;
+  }
 }
 
 /* Synchronize scrolling between header and content */
@@ -1919,15 +2145,39 @@ body {
 }
 </style>
 <style>
+  :root {
+    --custom-btn-primary: #3498db; /* Default sky blue, change as needed */
+    --custom-btn-primary-hover: #009ee3;
+  }
+
+/* Custom sky blue button color for all .btn-primary buttons */
+.btn.btn-primary {
+  background: var(--custom-btn-primary) !important;
+  border-color: var(--custom-btn-primary) !important;
+}
+.btn.btn-primary:hover, .btn.btn-primary:focus {
+  background: var(--custom-btn-primary-hover) !important;
+  border-color: var(--custom-btn-primary-hover) !important;
+}
+</style>
+<style>
 /* Weekend column and cell highlight */
+.sticky-header-row .date-column.weekend {
 .sticky-header-row .date-column.weekend {
   background: #8dbee3 !important;
   color: #090809 !important;
 }
 
+
 .calendar-cell.weekend {
   background: #adabab !important;
   color: #212529 !important;
+}
+
+/* Additional weekend styling for the sticky layout */
+.date-column.weekend {
+  background: #8dbee3 !important;
+  color: #090809 !important;
 }
 
 /* Additional weekend styling for the sticky layout */
@@ -2102,6 +2352,9 @@ $(document).ready(function() {
   
   // Load available projects
   loadProjects();
+  
+  // Initialize sticky calendar scroll synchronization
+  initializeStickyCalendarScrolling();
   
   // Initialize sticky calendar scroll synchronization
   initializeStickyCalendarScrolling();
@@ -2610,6 +2863,82 @@ $(document).ready(function() {
     }
   });
 });
+
+// Initialize sticky calendar scrolling synchronization
+function initializeStickyCalendarScrolling() {
+  const $headerRow = $('.sticky-header-row');
+  const $calendarContent = $('.calendar-content');
+  const $firstColumn = $('.sticky-first-column');
+  
+  // Synchronize horizontal scrolling between header and content
+  $calendarContent.on('scroll', function() {
+    const scrollLeft = $(this).scrollLeft();
+    const scrollTop = $(this).scrollTop();
+    
+    // Sync horizontal scroll with header
+    $headerRow.scrollLeft(scrollLeft);
+    
+    // Sync vertical scroll with first column
+    $firstColumn.scrollTop(scrollTop);
+  });
+  
+  // Handle header scrolling (when user scrolls header directly)
+  $headerRow.on('scroll', function() {
+    const scrollLeft = $(this).scrollLeft();
+    $calendarContent.scrollLeft(scrollLeft);
+  });
+  
+  // Handle first column scrolling (when user scrolls sidebar directly)
+  $firstColumn.on('scroll', function() {
+    const scrollTop = $(this).scrollTop();
+    $calendarContent.scrollTop(scrollTop);
+  });
+  
+  // Optimize scrolling performance with requestAnimationFrame
+  let ticking = false;
+  
+  function updateScrollPositions() {
+    const scrollLeft = $calendarContent.scrollLeft();
+    const scrollTop = $calendarContent.scrollTop();
+    
+    $headerRow.scrollLeft(scrollLeft);
+    $firstColumn.scrollTop(scrollTop);
+    
+    ticking = false;
+  }
+  
+  $calendarContent.on('scroll', function() {
+    if (!ticking) {
+      requestAnimationFrame(updateScrollPositions);
+      ticking = true;
+    }
+  });
+  
+  // Handle touch scrolling for mobile devices
+  let isTouch = false;
+  
+  $calendarContent.on('touchstart', function() {
+    isTouch = true;
+  });
+  
+  $calendarContent.on('touchend', function() {
+    setTimeout(() => { isTouch = false; }, 300);
+  });
+  
+  // Smooth scrolling behavior for better UX
+  $calendarContent.css({
+    'scroll-behavior': 'smooth',
+    '-webkit-overflow-scrolling': 'touch'
+  });
+  
+  // Ensure proper initial positioning
+  setTimeout(() => {
+    $headerRow.scrollLeft(0);
+    $firstColumn.scrollTop(0);
+    $calendarContent.scrollLeft(0);
+    $calendarContent.scrollTop(0);
+  }, 100);
+}
 
 // Initialize sticky calendar scrolling synchronization
 function initializeStickyCalendarScrolling() {
